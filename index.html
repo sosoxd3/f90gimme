@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="ar">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>LiveMatchCenter — مباريات اليوم (قانوني)</title>
+  <style>
+    :root{--bg:#0b1020;--card:#0f1724;--accent:#ff6b35;--muted:#9aa4b2}
+    body{margin:0;font-family:Inter,system-ui,Arial;background:linear-gradient(180deg,#041025 0%,var(--bg) 100%);color:#fff}
+    header{padding:18px;display:flex;align-items:center;gap:12px}
+    .logo{width:44px;height:44px;border-radius:8px;background:linear-gradient(135deg,var(--accent),#ffd089);display:flex;align-items:center;justify-content:center;color:#08101a;font-weight:700}
+    .container{max-width:980px;margin:18px auto;padding:0 14px}
+    .card{background:var(--card);border-radius:12px;padding:14px;margin-bottom:12px;box-shadow:0 6px 18px rgba(2,6,23,0.6)}
+    .match{display:flex;gap:12px;align-items:center;justify-content:space-between}
+    .teams{display:flex;gap:10px;align-items:center}
+    .team{name-space:nowrap}
+    .meta{color:var(--muted);font-size:13px}
+    .btn{background:var(--accent);border:none;padding:8px 12px;border-radius:8px;color:#08101a;font-weight:700;cursor:pointer}
+    .search{display:flex;gap:8px;margin-bottom:12px}
+    input[type=text]{flex:1;padding:10px;border-radius:10px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:#fff}
+    .player{width:100%;max-width:900px;margin:0 auto}
+    video,iframe{width:100%;height:56vh;border-radius:10px;border:0}
+    .note{font-size:13px;color:var(--muted);margin-top:8px}
+    @media(max-width:600px){video,iframe{height:42vh}}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">LM</div>
+    <div>
+      <div style="font-weight:700">LiveMatchCenter</div>
+      <div style="font-size:13px;color:#9aa4b2">مباريات اليوم — روابط قانونية فقط</div>
+    </div>
+  </header>
+
+  <main class="container">
+    <div class="card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <strong>مباريات اليوم</strong>
+        <div class="meta" id="server-time">--</div>
+      </div>
+      <div class="search">
+        <input id="q" placeholder="ابحث عن فريق أو دوري..." />
+        <button id="refresh" class="btn">تحديث</button>
+      </div>
+
+      <div id="matches"></div>
+      <div id="empty" class="note">تحميل المباريات...</div>
+    </div>
+
+    <div id="playerWrap" class="card" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div id="matchTitle" style="font-weight:700"></div>
+          <div id="matchTime" class="meta"></div>
+        </div>
+        <button id="closePlayer" class="btn">إغلاق المشغل</button>
+      </div>
+      <div style="margin-top:12px" class="player">
+        <!-- هنا سيظهر iframe أو فيديو YouTube أو placeholder -->
+        <div id="playerContainer"></div>
+      </div>
+      <div class="note">ملاحظة: إذا كان البث متاحًا رسميًا على YouTube أو منصات البث، سيظهر هنا (Embed). لا نقوم ببث أي محتوى محمي بحقوق بدون إذن.</div>
+    </div>
+
+    <div class="card">
+      <strong>كيفية تشغيل هذه النسخة</strong>
+      <ol style="color:var(--muted)">
+        <li>الشفرة تبحث عن مباريات باستخدام مصدر API قابل للتعديل (انظر أعلى الشيفرة).</li>
+        <li>إذا لم يتوفر رابط بث رسمي، ستعرض صفحة المباراة "مشاهدة من المصدر الرسمي" فقط.</li>
+        <li>يمكن ربط API مثل API-Football أو Football-Data مع مفتاحك الخاص (أمثلة في التعليقات).</li>
+      </ol>
+    </div>
+  </main>
+
+<script>
+// ====== إعدادات يمكن تعديلها ======
+// ضع هنا رابط الـ API الذي تفضله. النموذج يدعم API يرد بكائن JSON يحوي قائمة مباريات.
+// مثال: استخدام API-Football (يتطلب key) أو أي مصدر آخر. إذا لم يكن لديك API، ستستخدم بيانات تجريبية (mock).
+const CONFIG = {
+  // امثلة: 
+  // endpoint: 'https://api.football-data.org/v4/matches?dateFrom=2025-11-01&dateTo=2025-11-01',
+  // headers: { 'X-Auth-Token': 'YOUR_API_KEY' }
+
+  endpoint: '', // اتركه فارغًا لاستخدام بيانات تجريبية
+  headers: {}
+};
+
+// ================= helper ==================
+function el(tag, attrs={}, txt=''){ const e=document.createElement(tag); Object.entries(attrs).forEach(([k,v])=>e.setAttribute(k,v)); if(txt) e.textContent=txt; return e }
+
+// ====== بيانات تجريبية (تُستخدم إن لم تُدخل API) ======
+const MOCK = [
+  {id:'m1',league:'UEFA Champions League', home:'Real Madrid', away:'Barcelona', start:'2025-11-01T19:45:00Z', youtube:''},
+  {id:'m2',league:'Premier League', home:'Manchester City', away:'Liverpool', start:'2025-11-01T21:30:00Z', youtube:'YOUTUBE_VIDEO_ID_EXAMPLE'},
+  {id:'m3',league:'LaLiga', home:'Atletico', away:'Sevilla', start:'2025-11-02T18:00:00Z', youtube:''}
+];
+
+// ================= عرض الوقت ==================
+function updateServerTime(){ const now=new Date(); document.getElementById('server-time').textContent = now.toLocaleString('ar-EG'); }
+setInterval(updateServerTime,1000); updateServerTime();
+
+// ================= تحميل المباريات ==================
+async function fetchMatches(){
+  const container = document.getElementById('matches'); container.innerHTML='';
+  document.getElementById('empty').textContent='جاري التحميل...';
+
+  try{
+    let matches = [];
+    if(CONFIG.endpoint){
+      const resp = await fetch(CONFIG.endpoint, { headers: CONFIG.headers });
+      if(!resp.ok) throw new Error('فشل تحميل البيانات');
+      const data = await resp.json();
+      // **تحويل نموذج بيانات شائع**: هنا نحاول التوافق مع هيكل API-Football / football-data
+      // حاول أن تكيّف هذا الجزء حسب شكل الرد من API الذي تستعمله.
+      if(data.matches) matches = data.matches.map(m=>({
+        id: m.id || (m.homeTeam?.name+"-"+m.awayTeam?.name),
+        league: m.competition?.name || m.league || 'Unknown',
+        home: m.homeTeam?.name || m.home || 'Home',
+        away: m.awayTeam?.name || m.away || 'Away',
+        start: m.utcDate || m.start || new Date().toISOString(),
+        youtube: ''
+      }));
+      else if(Array.isArray(data)) matches = data; // assume already in compatible format
+    } else {
+      // استخدام بيانات تجريبية
+      matches = MOCK;
+    }
+
+    if(matches.length===0){ document.getElementById('empty').textContent='لا توجد مباريات اليوم (تابع التحديث لاحقًا).'; return }
+    document.getElementById('empty').textContent='';
+
+    const q = document.getElementById('q');
+    const filter = (q.value||'').trim().toLowerCase();
+
+    matches.filter(m=>!filter || (m.home+m.away+m.league).toLowerCase().includes(filter) )
+      .forEach(renderMatch);
+
+  }catch(err){ console.error(err); document.getElementById('empty').textContent = 'حدث خطأ أثناء تحميل المباريات.' }
+}
+
+function renderMatch(m){
+  const wrap = el('div',{class:'card'},'');
+  const row = el('div',{class:'match'});
+  const left = el('div',{class:'teams'});
+  const teams = el('div',{},`${m.home} — ${m.away}`);
+  const meta = el('div',{class:'meta'}, new Date(m.start).toLocaleString('ar-EG'));
+  left.appendChild(teams);
+  left.appendChild(meta);
+
+  const right = el('div',{});
+  const watch = el('button',{class:'btn'}, 'مشاهدة');
+  watch.onclick = ()=> openPlayer(m);
+  right.appendChild(watch);
+
+  row.appendChild(left); row.appendChild(right);
+  wrap.appendChild(row);
+  document.getElementById('matches').appendChild(wrap);
+}
+
+// ========== مشغل (قانوني: يظهر YouTube embed فقط إن وُجد) ==========
+function openPlayer(m){
+  document.getElementById('playerWrap').style.display='block';
+  document.getElementById('matchTitle').textContent = m.home + ' — ' + m.away + ' ('+m.league+')';
+  document.getElementById('matchTime').textContent = 'بداية: ' + new Date(m.start).toLocaleString('ar-EG');
+
+  const pc = document.getElementById('playerContainer'); pc.innerHTML='';
+
+  if(m.youtube && m.youtube.length>0){
+    const iframe = document.createElement('iframe');
+    iframe.src = 'https://www.youtube.com/embed/' + encodeURIComponent(m.youtube) + '?rel=0&autoplay=1';
+    iframe.setAttribute('allow','accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture');
+    pc.appendChild(iframe);
+  } else {
+    // مشغل وهمي أو اقتراحات
+    const p = el('div',{}, 'لا يوجد بث رسمي مضمّن لهذه المباراة حالياً. يمكنك مشاهدة القنوات الناقلة الرسمية أو متابعة النتائج المباشرة هنا.');
+    const link = el('a',{href:'#',class:'btn'}, 'روابط القنوات الرسمية');
+    link.onclick = (e)=>{ e.preventDefault(); alert('ضع هنا روابط القنوات الرسمية أو توجيه المستخدم إلى صفحة الشراء البثّ'); }
+    pc.appendChild(p); pc.appendChild(link);
+  }
+}
+
+document.getElementById('closePlayer').onclick = ()=>{ document.getElementById('playerWrap').style.display='none'; }
+
+document.getElementById('refresh').onclick = fetchMatches;
+
+document.getElementById('q').addEventListener('keyup', ()=>fetchMatches());
+
+// تحميل أولي
+fetchMatches();
+
+</script>
+</body>
+</html>
